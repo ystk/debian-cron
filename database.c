@@ -29,6 +29,7 @@ static char rcsid[] = "$Id: database.c,v 2.8 1994/01/15 20:43:43 vixie Exp $";
 #undef __USE_GNU
 #include <sys/stat.h>
 #include <sys/file.h>
+#include <time.h>
 
 #define TMAX(a,b) ((a)>(b)?(a):(b))
 
@@ -52,6 +53,12 @@ static	void		process_crontab __P((char *, char *, char *,
 static int valid_name (char *filename);
 static user *get_next_system_crontab __P((user *));
 #endif
+
+void force_rescan_user(cron_db *old_db, cron_db *new_db, const char *fname, time_t old_mtime);
+
+static void add_orphan(const char *uname, const char *fname, const char *tabname);
+static void free_orphan(orphan *o);
+
 void
 load_database(old_db)
 	cron_db		*old_db;
@@ -324,7 +331,7 @@ process_crontab(uname, fname, tabname, statbuf, new_db, old_db)
 {
 	struct passwd	*pw = NULL;
 	int		crontab_fd = OK - 1;
-	user		*u;
+	user		*u = NULL;
 
 #ifdef DEBIAN
 	/* If the name begins with *system*, don't worry about password -
@@ -338,6 +345,7 @@ process_crontab(uname, fname, tabname, statbuf, new_db, old_db)
 		if (strncmp(fname, "tmp.", 4)) {
 			/* don't log these temporary files */
 			log_it(fname, getpid(), "ORPHAN", "no passwd entry");
+			add_orphan(uname, fname, tabname);
 		}
 		goto next_crontab;
 	}
@@ -357,18 +365,31 @@ process_crontab(uname, fname, tabname, statbuf, new_db, old_db)
             }
             /* Check to make sure that the crontab is owned by the correct user
                (or root) */
-
-            if (statbuf->st_uid != pw->pw_uid &&
-                statbuf->st_uid != ROOT_UID) {
+            if (statbuf->st_uid != pw->pw_uid && statbuf->st_uid != ROOT_UID) {
                 log_it(fname, getpid(), "WRONG FILE OWNER", tabname);
+                force_rescan_user(old_db, new_db, fname, 0);
 		goto next_crontab;
             }
-            if (!S_ISREG(statbuf->st_mode) ||
-                statbuf->st_nlink != 1 ||
-                (statbuf->st_mode & 07777) != 0600) {
-                log_it(fname, getpid(), "WRONG INODE INFO", tabname);
- 		goto next_crontab;
-            }
+
+	    /* Check to make sure that the crontab is a regular file */
+            if (!S_ISREG(statbuf->st_mode)) {
+		log_it(fname, getpid(), "NOT A REGULAR FILE", tabname);
+		goto next_crontab;
+	    }
+
+	    /* Check to make sure that the crontab's permissions are secure */
+            if ((statbuf->st_mode & 07777) != 0600) {
+		log_it(fname, getpid(), "INSECURE MODE (mode 0600 expected)", tabname);
+                force_rescan_user(old_db, new_db, fname, 0);
+		goto next_crontab;
+	    }
+
+	    /* Check to make sure that there are no hardlinks to the crontab */
+            if (statbuf->st_nlink != 1) {
+		log_it(fname, getpid(), "NUMBER OF HARD LINKS > 1", tabname);
+                force_rescan_user(old_db, new_db, fname, 0);
+		goto next_crontab;
+	    }
         } else {
             /* System crontab path. These can be symlinks, but the
                symlink and the target must be owned by root. */
@@ -378,64 +399,67 @@ process_crontab(uname, fname, tabname, statbuf, new_db, old_db)
             }
             if (S_ISLNK(statbuf->st_mode) && statbuf->st_uid != ROOT_UID) {
                 log_it(fname, getpid(), "WRONG SYMLINK OWNER", tabname);
+                force_rescan_user(old_db, new_db, fname, 0);
 		goto next_crontab;
             }
             if ((crontab_fd = open(tabname, O_RDONLY, 0)) < OK) {
 		/* crontab not accessible?
 
-                   If tabname is a regular file, this error is bad so we skip
-		   it instead of adding it to the new DB. If it's a symlink,
-                   it's most probably just broken, so we emit a warning.
-                   Then we re-add the old crontab to the new DB, but only after
-                   removing all entries and resetting its mtime. Once the link
-                   is fixed, it will get picked up and processed again.
+		   If tabname is a symlink, it's most probably just broken, so
+		   we force a rescan. Once the link is fixed, it will get picked
+		   up and processed again. If tabname is a regular file, this
+		   error is bad so we skip it instead.
 		 */
-                if (S_ISREG(statbuf->st_mode)) {
+		if (S_ISLNK(statbuf->st_mode)) {
+                    log_it(fname, getpid(), "CAN'T OPEN SYMLINK", tabname);
+                    force_rescan_user(old_db, new_db, fname, 0);
+                    goto next_crontab;
+                } else {
 		    log_it(fname, getpid(), "CAN'T OPEN", tabname);
 		    goto next_crontab;
-                } else {
-                    log_it(fname, getpid(), "CAN'T OPEN SYMLINK", tabname);
-
-                    u = find_user(old_db, fname);
-                    if (u != NULL) {
-			Debug(DLOAD, ("\t%s: [using placeholder]\n", fname))
-                        unlink_user(old_db, u);
-
-			if (u->crontab != NULL) {
-                    	    entry *e, *ne;
-			    for (e = u->crontab;  e != NULL;  e = ne) {
-			    	ne = e->next;
-			    	free_entry(e);
-			    }
-			}
-                        u->crontab = NULL;
-                        u->mtime = 0;
-                        link_user(new_db, u);
-                        goto next_crontab;
-                    }
-                }                
+		}
             }
 
             if (fstat(crontab_fd, statbuf) < OK) {
 		log_it(fname, getpid(), "FSTAT FAILED", tabname);
 		goto next_crontab;
             }
+
             /* Check to make sure that the crontab is owned by root */
             if (statbuf->st_uid != ROOT_UID) {
                 log_it(fname, getpid(), "WRONG FILE OWNER", tabname);
+                force_rescan_user(old_db, new_db, fname, 0);
 		goto next_crontab;
             }
-            /* Check to make sure that the crontab is writable only by root */
-            if ((statbuf->st_mode & S_IWGRP) || (statbuf->st_mode & S_IWOTH))  {
-                log_it(fname, getpid(), "WRONG INODE INFO", tabname);
+
+            /* Check to make sure that the crontab is a regular file */
+            if (!S_ISREG(statbuf->st_mode)) {
+		log_it(fname, getpid(), "NOT A REGULAR FILE", tabname);
 		goto next_crontab;
-            }
+	    }
+
+            /* Check to make sure that the crontab is writable only by root
+	     * This should really be in sync with the check for users above
+	     * (mode 0600). An upgrade path could be implemented for 4.1
+	     */
+	    if ((statbuf->st_mode & S_IWGRP) || (statbuf->st_mode & S_IWOTH)) {
+		log_it(fname, getpid(), "INSECURE MODE (group/other writable)", tabname);
+                force_rescan_user(old_db, new_db, fname, 0);
+		goto next_crontab;
+	    }
             /* Technically, we should also check whether the parent dir is
  	     * writable, and so on. This would only make proper sense for
  	     * regular files; we can't realistically check all possible
  	     * security issues resulting from symlinks. We'll just assume that
  	     * root will handle responsible when creating them.
 	     */
+
+	    /* Check to make sure that there are no hardlinks to the crontab */
+            if (statbuf->st_nlink != 1) {
+		log_it(fname, getpid(), "NUMBER OF HARD LINKS > 1", tabname);
+                force_rescan_user(old_db, new_db, fname, 0);
+		goto next_crontab;
+	    }
         }
         /*
          * The link count check is not sufficient (the owner may
@@ -443,7 +467,10 @@ process_crontab(uname, fname, tabname, statbuf, new_db, old_db)
          * 1), but this is all we've got.
          */
 	Debug(DLOAD, ("\t%s:", fname))
-	u = find_user(old_db, fname);
+
+	if (old_db != NULL)
+		u = find_user(old_db, fname);
+
 	if (u != NULL) {
 		/* if crontab has not changed since we last read it
 		 * in, then we can just use our existing entry.
@@ -472,7 +499,16 @@ process_crontab(uname, fname, tabname, statbuf, new_db, old_db)
 	if (u != NULL) {
 		u->mtime = statbuf->st_mtime;
 		link_user(new_db, u);
-	}
+        } else {
+                /* The crontab we attempted to load contains a syntax error. A
+                 * fix won't get picked up by the regular change detection
+                 * code, so we force a rescan. statbuf->st_mtime still contains
+                 * the file's mtime, so we use it to rescan only when an update
+                 * has actually taken place.
+                 */
+                force_rescan_user(old_db, new_db, fname, statbuf->st_mtime);
+        }   
+
 
 next_crontab:
 	if (crontab_fd >= OK) {
@@ -533,3 +569,113 @@ get_next_system_crontab (curtab)
 }
 
 #endif
+
+/* Force rescan of a crontab the next time cron wakes up
+ *
+ * cron currently only detects changes caused by an mtime update; it does not
+ * detect other attribute changes such as UID or mode. To allow cron to recover
+ * from errors of that nature as well, this function removes the crontab from
+ * the old DB (if present there) and adds an empty crontab to the new DB with
+ * a given mtime. Specifying mtime as 0 will force a rescan the next time the
+ * daemon wakes up.
+ */
+void
+force_rescan_user(cron_db *old_db, cron_db *new_db, const char *fname, time_t old_mtime)
+{
+        user *u;
+
+	/* Remove from old DB and free resources */
+	u = find_user(old_db, fname);
+	if (u != NULL) {
+		Debug(DLOAD, (" [delete old data]"))
+		unlink_user(old_db, u);
+		free_user(u);
+	}
+
+	/* Allocate an empty crontab with the specified mtime, add it to new DB */
+        if ((u = (user *) malloc(sizeof(user))) == NULL) {
+                errno = ENOMEM;
+        }   
+        if ((u->name = strdup(fname)) == NULL) {
+                free(u);
+                errno = ENOMEM;
+        }   
+        u->mtime = old_mtime;
+        u->crontab = NULL;
+#ifdef WITH_SELINUX
+        u->scontext = NULL;
+#endif
+        Debug(DLOAD, ("\t%s: [added empty placeholder to force rescan]\n", fname))
+	link_user(new_db, u);
+}
+
+/* This fix was taken from Fedora cronie */
+static orphan *orphans;
+
+static void
+free_orphan(orphan *o) {
+        free(o->tabname);
+        free(o->fname);
+        free(o->uname);
+        free(o);
+}
+
+void
+check_orphans(cron_db *db) {
+        orphan *prev_orphan = NULL;
+        orphan *o = orphans;
+	struct stat statbuf;
+
+        while (o != NULL) {
+                if (getpwnam(o->uname) != NULL) {
+                        orphan *next = o->next;
+
+                        if (prev_orphan == NULL) {
+                                orphans = next;
+                        } else {
+                                prev_orphan->next = next;
+                        }   
+
+                        process_crontab(o->uname, o->fname, o->tabname,
+                                &statbuf, db, NULL);
+
+                        /* process_crontab could have added a new orphan */
+                        if (prev_orphan == NULL && orphans != next) {
+                                prev_orphan = orphans;
+                        }   
+                        free_orphan(o);
+                        o = next;
+                } else {
+                        prev_orphan = o;
+                        o = o->next;
+                }   
+        }   
+}
+
+static void
+add_orphan(const char *uname, const char *fname, const char *tabname) {
+        orphan *o; 
+
+        o = calloc(1, sizeof(*o));
+        if (o == NULL)
+                return;
+
+        if (uname)
+                if ((o->uname=strdup(uname)) == NULL)
+                        goto cleanup;
+
+        if (fname)
+                if ((o->fname=strdup(fname)) == NULL)
+                        goto cleanup;
+
+        if (tabname)
+                if ((o->tabname=strdup(tabname)) == NULL)
+                        goto cleanup;
+
+        o->next = orphans;
+        orphans = o;
+        return;
+
+cleanup:
+        free_orphan(o);
+}

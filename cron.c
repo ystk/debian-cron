@@ -173,6 +173,7 @@ main(argc, argv)
 		} while (clockTime == timeRunning);
 		timeRunning = clockTime;
 
+		check_orphans(&database);
 		load_database(&database);
 
 		/*
@@ -465,6 +466,7 @@ parse_args(argc, argv)
 {
 	int	argch;
 
+	log_level = 1;
 	stay_foreground = 0;
         lsbsysinit_mode = 0;
 

@@ -72,9 +72,9 @@ LINTFLAGS	=	-hbxa $(INCLUDE) $(COMPAT) $(DEBUGGING)
 #CC		=	vcc
 #<<manifest defines>>
 # Allow override from command line
-DEBUG_DEFS = -DDEBUGGING=0   
+DEBUG_DEFS  ?= -DDEBUGGING=0   
 # The -DUSE_SIGCHLD is needed for the Alpha port
-DEFS = -DDEBIAN -DUSE_SIGCHLD $(DEBUG_DEFS) $(PAM_DEFS) $(SELINUX_DEFS)
+DEFS = -DDEBIAN -DUSE_SIGCHLD $(DEBUG_DEFS) $(PAM_DEFS) $(SELINUX_DEFS) $(AUDIT_DEFS)
 #(SGI IRIX systems need this)
 #DEFS		=	-D_BSD_SIGNALS -Dconst=
 #<<the name of the BSD-like install program>>
@@ -87,7 +87,7 @@ INSTALL = install -s
 #################################### end configurable stuff
 
 SHELL		=	/bin/sh
-CFLAGS		=	$(OPTIM) $(INCLUDE) $(COMPAT) $(DEFS)
+CFLAGS		+=	$(INCLUDE) $(COMPAT) $(DEFS)
 
 INFOS		=	README CHANGES FEATURES INSTALL CONVERSION THANKS MAIL
 MANPAGES	=	bitstring.3 crontab.5 crontab.1 cron.8 putman.sh

@@ -131,6 +131,7 @@ child_process(e, u)
 	register char	*input_data;
 	char		*usernm, *mailto;
 	int		children = 0;
+	pid_t		job_pid;
 
 #if defined(USE_PAM)
 	int		retcode = 0;
@@ -249,7 +250,7 @@ child_process(e, u)
 
 	/* fork again, this time so we can exec the user's command.
 	 */
-	switch (fork()) {
+	switch (job_pid = fork()) {
 	case -1:
 		log_it("CRON",getpid(),"error","can't fork");
 		exit(ERROR_EXIT);
@@ -258,19 +259,17 @@ child_process(e, u)
 		Debug(DPROC, ("[%d] grandchild process fork()'ed\n",
 			      getpid()))
 
-		/* write a log message.  we've waited this long to do it
+		/* write a log message .  we've waited this long to do it
 		 * because it was not until now that we knew the PID that
 		 * the actual user command shell was going to get and the
 		 * PID is part of the log message.
 		 */
-		if (log_level >= 1) {
+		if ( (log_level & CRON_LOG_JOBSTART) && ! (log_level & CRON_LOG_JOBPID)) {
 			char *x = mkprints((u_char *)e->cmd, strlen(e->cmd));
-
 			log_it(usernm, getpid(), "CMD", x);
 			free(x);
 		}
-
-		/* that's the last thing we'll log.  close the log files.
+		/* nothing to log from now on. close the log files.
 		 */
 		log_close();
 
@@ -380,6 +379,16 @@ child_process(e, u)
 		break;
 	default:
 		/* parent process */
+		/* write a log message if we want the parent and child
+		 * PID values
+		 */
+		if ( (log_level & CRON_LOG_JOBSTART) && (log_level & CRON_LOG_JOBPID)) {
+			char logcmd[MAX_COMMAND + 8];
+			snprintf(logcmd, sizeof(logcmd), "[%d] %s", (int) job_pid, e->cmd);
+			char *x = mkprints((u_char *)logcmd, strlen(logcmd));
+			log_it(usernm, getpid(), "CMD", x);
+			free(x);
+		}
 		break;
 	}
 
@@ -481,18 +490,20 @@ child_process(e, u)
 		Debug(DPROC, ("[%d] grandchild #%d finished, status=%04x\n",
 			getpid(), pid, WEXITSTATUS(waiter)))
 
-		if (WIFEXITED(waiter) && WEXITSTATUS(waiter)) {
-			status = waiter;
-			snprintf(msg, 256, "grandchild #%d failed with exit "
-				"status %d", pid, WEXITSTATUS(waiter));
-			log_it("CRON", getpid(), "error", msg);
-		} else if (WIFSIGNALED(waiter)) {
-			status = waiter;
-			snprintf(msg, 256, "grandchild #%d terminated by signal"
-				" %d%s", pid, WTERMSIG(waiter),
-				WCOREDUMP(waiter) ? ", dumped core" : "");
-			log_it("CRON", getpid(), "error", msg);
-		} 
+		if (log_level & CRON_LOG_JOBFAILED) {
+			if (WIFEXITED(waiter) && WEXITSTATUS(waiter)) {
+				status = waiter;
+				snprintf(msg, 256, "grandchild #%d failed with exit "
+					"status %d", pid, WEXITSTATUS(waiter));
+				log_it("CRON", getpid(), "error", msg);
+			} else if (WIFSIGNALED(waiter)) {
+				status = waiter;
+				snprintf(msg, 256, "grandchild #%d terminated by signal"
+					" %d%s", pid, WTERMSIG(waiter),
+					WCOREDUMP(waiter) ? ", dumped core" : "");
+				log_it("CRON", getpid(), "error", msg);
+			} 
+		}
 	}
 
 // Finally, send any output of the command to the mailer; also, alert
@@ -633,9 +644,16 @@ child_process(e, u)
 mail_finished:
 	fclose(tmpout);
 
-	if (log_level >= 2) {
-		char *x = mkprints((u_char *)e->cmd, strlen(e->cmd));
-		log_it(usernm, getpid(), "END", x);
+	if (log_level & CRON_LOG_JOBEND) {
+		char *x;
+		if (log_level & CRON_LOG_JOBPID) {
+			char logcmd[MAX_COMMAND + 8];
+			snprintf(logcmd, sizeof(logcmd), "[%d] %s", (int) job_pid, e->cmd);
+			x = mkprints((u_char *)logcmd, strlen(logcmd));
+		} else {
+			x = mkprints((u_char *)e->cmd, strlen(e->cmd));
+		}
+		log_it(usernm, job_pid, "END", x);
 		free(x);
 	}
 
