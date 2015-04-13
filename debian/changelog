@@ -1,3 +1,68 @@
+cron (3.0pl1-127) unstable; urgency=medium
+
+  * Drop $READ_ENV from cron's command line. It does not belong there.
+    Closes: #766779
+
+ -- Christian Kastner <debian@kvr.at>  Sat, 25 Oct 2014 20:47:09 +0200
+
+cron (3.0pl1-126) unstable; urgency=low
+
+  * Packaging (general): removed unused files from the source that had been
+    already removed in 3.0pl1-117 but got reintroduced due to a merge.
+
+ -- Javier Fernández-Sanguino Peña <jfs@debian.org>  Fri, 24 Oct 2014 23:01:59 +0200
+
+cron (3.0pl1-125) unstable; urgency=medium
+
+  * Acknowledge NMUs. Thanks, Laurent Bigonville and Ansgar Burchardt.
+    Closes: #749271
+
+  [ Christian Kastner ]
+  * debian/control:
+    - Bump Standards-Version to 3.9.6 (no changes needed)
+    - Canonicalize Vcs-* URLs
+  * debian/copyright:
+    - Bump years
+    - Don't use spaces in License short name
+  * debian/source/lintian-overrides:
+    - Drop overrides from pre-UTF-8 debian/control era
+  * debian/rules:
+    - Extend documentation
+  * debian/cron.init:
+    - Include winbind in Should-Start/Stop. Closes: #732203
+  * crontab.5:
+    - Don't use hyphen as a minus sign
+  * cron.8:
+    - Drop stray words in cron.8. Thanks, Regid Ichira! Closes: #702091
+    - Fix misspelled 'sytem'. Thanks, green! Closes: #753775
+  * cron.c,crontab.c:
+    - Use basename of argv[0] as syslog tag. Closes: #752750
+  * cron.c:
+     - Use case-insensitive comparison in charset selection. Thanks,
+       Malcolm Scott! LP: #1169160
+  * entry.c:
+    - Detect invalid entry: step specified without a range. Thanks,
+      Justin T. Pryzby! Closes: #733478
+    - Error out when a command field is too long instead of silently
+      truncating it. Closes: #686223, LP: #826702
+  * do_command.c:
+    - Fix initialization and increment of mailed bytes counter.
+      Closes: #691488
+  * cron.c, do_command.c:
+    - Add an option -n to include FQDN in mail subject. Closes: #570423
+
+  [ brian m. carlson ]
+  * config.h, do_command.c:
+    - Send proper 8-bit emails by including an appropriate MIME-Version and
+      adjusting the Content-Transfer-Encoding header accordingly.
+      Closes: #694686
+
+  [ Javier Fernández-Sanguino ]
+  * Change systemd definition in order for the daemon to read an honor
+    /etc/default/cron (Closes: #754279)
+
+ -- Javier Fernández-Sanguino Peña <jfs@debian.org>  Fri, 24 Oct 2014 16:17:56 +0200
+
 cron (3.0pl1-124.2) unstable; urgency=medium
 
   * Non-maintainer upload.
