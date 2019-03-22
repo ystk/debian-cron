@@ -108,6 +108,10 @@ load_entry(file, error_func, pw, envp)
 	 */
 
 	e = (entry *) calloc(sizeof(entry), sizeof(char));
+	if (e == NULL) {
+		log_it("CRON", getpid(), "OOM", "Out of memory parsing crontab");
+		return NULL;
+	}
 
 	if (ch == '@') {
 		/* all of these should be flagged and load-limited; i.e.,

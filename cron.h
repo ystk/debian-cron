@@ -82,6 +82,7 @@
 #define	MAX_COMMAND	1000	/* max length of internally generated cmd */
 #define	MAX_TEMPSTR	1000	/* max length of envvar=value\0 strings */
 #define	MAX_ENVSTR	MAX_TEMPSTR	/* DO NOT change - buffer overruns otherwise */
+#define MAX_TAB_LINES	1000	/* max length of crontabs */
 #define	MAX_UNAME	20	/* max length of username, should be overkill */
 #define	ROOT_UID	0	/* don't change this, it really must be root */
 #define	ROOT_USER	"root"	/* ditto */
@@ -101,6 +102,7 @@
 #define	CRON_TAB(u)	"%s/%s", SPOOL_DIR, u
 #define	REG		register
 #define	PPC_NULL	((char **)NULL)
+#define NHEADER_LINES   3
 
 #ifndef MAXHOSTNAMELEN
 #define MAXHOSTNAMELEN 64
@@ -126,6 +128,8 @@
 			;
 #endif /* DEBUGGING */
 
+#define Stringify_(x)	#x
+#define Stringify(x)	Stringify_(x)
 #define	MkLower(ch)	(isupper(ch) ? tolower(ch) : ch)
 #define	MkUpper(ch)	(islower(ch) ? toupper(ch) : ch)
 #define	Set_LineNum(ln)	{Debug(DPARS|DEXT,("linenum=%d\n",ln)); \

@@ -240,6 +240,7 @@ load_user(crontab_fd, pw, uname, fname, tabname)
 	/*
 	 * load the crontab
 	 */
+	Set_LineNum(1)
 	do {
 		status = load_env(envstr, file);
 		switch (status) {
@@ -289,7 +290,19 @@ load_user(crontab_fd, pw, uname, fname, tabname)
 			}
 			break;
 		}
-	} while (status >= OK);
+	/* When counting lines, ignore the user-hidden header part, and account
+	 * for idiosyncrasies of LineNumber manipulation
+	 */
+	} while (status >= OK && LineNumber < MAX_TAB_LINES + NHEADER_LINES + 2);
+
+	if (LineNumber >= MAX_TAB_LINES + NHEADER_LINES + 2) {
+		log_it(fname, getpid(), "ERROR", "crontab must not be longer "
+				"than " Stringify(MAX_TAB_LINES) " lines, "
+				"this crontab file will be ignored");
+		free_user(u);
+		u = NULL;
+		goto done;
+	}
 
  done:
 	env_free(envp);

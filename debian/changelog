@@ -1,3 +1,33 @@
+cron (3.0pl1-127+deb8u2) jessie-security; urgency=medium
+
+  [ Christian Kastner ]
+  * SECURITY: Fix bypass of /etc/cron.{allow,deny} on failure to open
+    If these files exist, then they must be readable by the user executing
+    crontab(1). Users will now be denied by default if they aren't.
+    (LP: #1813833)
+  * SECURITY: Fix for possible DoS by use-after-free
+    A user reported a use-after-free condition in the cron daemon, leading to a
+    possible Denial-of-Service scenario by crashing the daemon.
+    (CVE-2019-9706) (Closes: #809167)
+  * SECURITY: DoS: Fix unchecked return of calloc()
+    Florian Weimer discovered that a missing check for the return value of
+    calloc() could crash the daemon, which could be triggered by a very
+    large crontab created by a user. (CVE-2019-9704)
+  * Enforce maximum crontab line count of 1000 to prevent a malicious user
+    from creating an excessivly large crontab. The daemon will log a warning
+    for existing files, and crontab(1) will refuse to create new ones.
+    (CVE-2019-9705)
+  * SECURITY: group crontab to root escalation
+    via postinst as described by Alexander Peslyak (Solar Designer) in
+    http://www.openwall.com/lists/oss-security/2017/06/08/3
+    (CVE-2017-9525)
+  * Add d/NEWS altering to the new 1000 lines limit.
+
+  [ Mike Gabriel ]
+  * debian/NEWS: Fix <distribution> from unstable to jessie-security.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Thu, 21 Mar 2019 20:43:10 +0100
+
 cron (3.0pl1-127+deb8u1) jessie; urgency=medium
 
   * d/cron.service: Use KillMode=process to kill only the daemon.

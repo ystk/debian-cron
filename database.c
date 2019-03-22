@@ -66,7 +66,7 @@ load_database(old_db)
         DIR		*dir;
 	struct stat	statbuf;
 	struct stat	syscron_stat;
-	DIR_T   	*dp;
+	DIR_T		*dp;
 	cron_db		new_db;
 	user		*u, *nu;
 #ifdef DEBIAN
@@ -595,10 +595,12 @@ force_rescan_user(cron_db *old_db, cron_db *new_db, const char *fname, time_t ol
 	/* Allocate an empty crontab with the specified mtime, add it to new DB */
         if ((u = (user *) malloc(sizeof(user))) == NULL) {
                 errno = ENOMEM;
+		return;
         }   
         if ((u->name = strdup(fname)) == NULL) {
                 free(u);
                 errno = ENOMEM;
+		return;
         }   
         u->mtime = old_mtime;
         u->crontab = NULL;

@@ -133,6 +133,14 @@ crontab(5), cron(8)
 /var/spool/cron/crontabs
 .fi
 .PP
+The files
+.I /etc/cron.allow
+and
+.I /etc/cron.deny
+if, they exist, must be either world-readable, or readable by group
+``crontab''. If they are not, then cron will deny access to all users until the
+permissions are fixed.
+.PP
 There is one file for each user's crontab under the /var/spool/cron/crontabs
 directory. Users are not allowed to edit the files under that directory
 directly to ensure that only users allowed by the system to run periodic tasks

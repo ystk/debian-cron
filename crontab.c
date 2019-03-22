@@ -46,8 +46,6 @@ static char rcsid[] = "$Id: crontab.c,v 2.13 1994/01/17 03:20:37 vixie Exp $";
 #endif
 
 
-#define NHEADER_LINES 3
-
 enum opt_t	{ opt_unknown, opt_list, opt_delete, opt_edit, opt_replace };
 
 #if DEBUGGING
@@ -886,7 +884,7 @@ replace_cmd() {
 	 */
 	Set_LineNum(1 - NHEADER_LINES)
 	CheckErrorCount = 0;  eof = FALSE;
-	while (!CheckErrorCount && !eof) {
+	while (!CheckErrorCount && !eof && LineNumber < MAX_TAB_LINES + 2) {
 		switch (load_env(envstr, tmp)) {
 		case ERR:
 			eof = TRUE;
@@ -901,6 +899,13 @@ replace_cmd() {
 		case TRUE:
 			break;
 		}
+	}
+
+	if (LineNumber >= MAX_TAB_LINES + 2) {
+		fprintf(stderr, "crontab is too long; maximum number of lines "
+				"is %d.\n", MAX_TAB_LINES);
+		fclose(tmp);  unlink(tn);
+		return (-1);
 	}
 
 	if (CheckErrorCount != 0) {

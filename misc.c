@@ -479,7 +479,23 @@ allowed(username)
 		init = TRUE;
 #if defined(ALLOW_FILE) && defined(DENY_FILE)
 		allow = fopen(ALLOW_FILE, "r");
+		if (allow == NULL) {
+			/* Only if the file does not exist do we ignore the
+			 * error. Otherwise, we deny by default.
+			 */
+			if (errno != ENOENT) {
+				perror(ALLOW_FILE);
+				return FALSE;
+			}
+		}
 		deny = fopen(DENY_FILE, "r");
+		if (allow == NULL) {
+			/* See above */
+			if (errno != ENOENT) {
+				perror(DENY_FILE);
+				return FALSE;
+			}
+		}
 		Debug(DMISC, ("allow/deny enabled, %d/%d\n", !!allow, !!deny))
 #else
 		allow = NULL;

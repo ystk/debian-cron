@@ -1,3 +1,13 @@
+cron (3.0pl1-127+deb8u2) jessie-security; urgency=medium
+
+  * As a reasonable protective measure, crontabs are now limited to 1000 lines
+    in length per crontab.
+    The maintainers find it very unlikely that longer crontabs exist; however,
+    if you do have a use case, please file a bug report with a brief rationale,
+    and we will consider raising this limit.
+
+ -- Christian Kastner <ckk@debian.org>  Sun, 10 Mar 2019 17:44:13 +0100
+
 cron (3.0pl1-119) unstable; urgency=low
 
     The semantics of the -L option of the cron daemon have changed: from
